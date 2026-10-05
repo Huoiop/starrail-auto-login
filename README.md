@@ -38,24 +38,82 @@ Python ──WebDriver──▶ chromedriver ──CDP──▶ Chrome ──渲
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y \
-    chromium-browser chromium-chromedriver \
-    xvfb x11vnc \
-    fonts-liberation libnss3 libatk-bridge2.0-0 libgtk-3-0 \
-    libgbm1 libasound2
+sudo apt-get install -y xvfb x11vnc fonts-liberation libnss3 libatk-bridge2.0-0t64 libgtk-3-0t64 libgbm1 libasound2t64
 ```
 
-> 用官方 Chrome 也行，但 **chromedriver 主版本号必须与 Chrome 一致**，否则启动报错。
+> Ubuntu 24.04+ 上 `chromium-browser` 已经通过 apt 转成 snap 分发，服务器环境通常装不上。**推荐直接安装 Google Chrome**（见第 2 步），比折腾 Chromium 省事。
 
-### 2. Python 依赖
+### 2. 安装 Google Chrome
+
+```bash
+wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+sudo dpkg -i google-chrome-stable_current_amd64.deb
+sudo apt-get -f install -y
+```
+
+验证：
+
+```bash
+google-chrome --version
+# 例：Google Chrome 154.0.8037.97
+```
+
+### 3. 安装 chromedriver
+
+chromedriver 的主版本号**必须与 Chrome 一致**（小版本可以不同），否则 Selenium 启动时会报 `session not created`。
+
+**3.1 记录 Chrome 主版本号**
+
+```bash
+google-chrome --version
+```
+
+输出中的第一段数字即主版本号，例如 `154.0.8037.97` → 主版本是 **154**。
+
+**3.2 从 npmmirror 下载对应版本**
+
+打开镜像目录，找到与你的主版本号匹配的版本号：
+
+```
+https://registry.npmmirror.com/binary.html?path=chrome-for-testing/
+```
+
+假设你选中的是 `154.0.8037.57`，下载并安装：
+
+```bash
+wget https://cdn.npmmirror.com/binaries/chrome-for-testing/154.0.8037.57/linux64/chromedriver-linux64.zip
+unzip chromedriver-linux64.zip
+sudo mv chromedriver-linux64/chromedriver /usr/local/bin/chromedriver
+sudo chmod +x /usr/local/bin/chromedriver
+```
+
+> 目录里不一定有和 Chrome 完全相同的完整版本号，选**主版本号相同**的任意一个即可，比如 Chrome 是 `154.0.8037.97`，chromedriver 用 `154.0.8037.57` 也能正常工作。
+
+**3.3 清理可能冲突的旧驱动**
+
+如果之前通过 apt 装过 `chromium-chromedriver`，`/usr/bin/chromedriver` 会和新的冲突，删掉它：
+
+```bash
+sudo rm -f /usr/bin/chromedriver
+```
+
+**3.4 验证**
+
+```bash
+which chromedriver
+chromedriver --version
+# 例：ChromeDriver 154.0.8037.57
+```
+
+### 4. Python 依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. 准备模板图片
+### 5. 准备模板图片
 
-在 `capture/` 下放 6 张 PNG（**自己截取**，1920×1080 分辨率下，只裁剪按钮本身）：
+在 `capture/` 下放 6 张 PNG（**项目已准备英文版本的截图**，1920×1080 分辨率下，只裁剪按钮本身）：
 
 | 文件            | 内容                    |
 | --------------- | ----------------------- |
@@ -66,7 +124,7 @@ pip install -r requirements.txt
 | `accept.png`    | 用户协议"同意"按钮      |
 | `completed.png` | 进入主界面的独有元素    |
 
-### 4. 配置 `.env`
+### 6. 配置 `.env`
 
 ```bash
 cp .env.example .env
@@ -75,14 +133,14 @@ cp .env.example .env
 最小配置：
 
 ```env
-CHROMEDRIVER_PATH=/usr/bin/chromedriver
+CHROMEDRIVER_PATH=/usr/local/bin/chromedriver
 CHROME_USER_DATA_DIR=chrome_profile
 Y_OFFSET=139
 ```
 
 完整配置见 [`.env.example`](.env.example)，所有字段都有注释。
 
-### 5. 首次登录（关键）
+### 7. 首次登录（关键）
 
 脚本不会帮你输密码，它只复用 `chrome_profile/` 里已有的登录态。
 
@@ -94,7 +152,7 @@ Y_OFFSET=139
 
 > cookie 过期后脚本会在第 1 步超时，重做一次上面流程即可。
 
-### 6. 运行
+### 8. 运行
 
 ```bash
 python3.11 main.py
@@ -137,29 +195,6 @@ python3.11 main.py
 
 ---
 
-## Docker 部署
-
-```yaml
-# docker-compose.yml
-services:
-  sr-cloud:
-    build: .
-    restart: unless-stopped
-    env_file: .env
-    ports:
-      - "5900:5900" # VNC，首次登录用
-    volumes:
-      - ./chrome_profile:/app/chrome_profile # 持久化登录态
-      - ./capture:/app/capture
-      - ./debug:/app/debug
-```
-
-`Dockerfile` 要点：锁定 Chrome 与 chromedriver 相同版本（避免漂移），安装 `xvfb x11vnc` 及 Chrome 运行库。完整示例见仓库根目录 `Dockerfile`。
-
-首次登录流程同上：先 `docker compose up -d`，VNC 连 `IP:5900` 手动登录，然后 `docker compose restart`。
-
----
-
 ## 可选模块
 
 两个模块**互相独立、各自开关**，不配置就跳过，完全不影响主流程。
@@ -198,10 +233,13 @@ Payload：
 **Q：报 `This version of ChromeDriver only supports Chrome version XXX`**
 chromedriver 与 Chrome 主版本号不一致，换成同版本即可，或在 `.env` 里把 `CHROMEDRIVER_PATH` 留空让 Selenium 自动下载。
 
+**Q：报 `The path is not a valid file: # ...`**
+`.env` 里把注释写到了 `=` 后面。注释必须单独成行，`=` 后面只写值本身。
+
 **Q：卡在第 1 步不动**
 先看 `debug/` 里最新的截图，判断当前停在哪个页面：
 
-- 是登录页 → cookie 过期，重做[首次登录](#5-首次登录关键)
+- 是登录页 → cookie 过期，重做[首次登录](#7-首次登录关键)
 - 是游戏页 → 模板不匹配，重截 `start.png` 或调低 `THRESHOLD`
 
 **Q：点击位置不对，总是偏上或偏下**

@@ -4,6 +4,7 @@
 - 通知（AstrBot）：可选，先发文字，1 秒后发图片
 - 上报（Webhook）：可选，成功登录后触发
 - X11 点击：内嵌（基于 python-xlib），带 Y_OFFSET 补偿
+- 登录模式：LOGIN_ONLY=true 时只打开浏览器，供 VNC 手动登录
 - 流程：弹窗/进入游戏 → 排队/星云币 → loading → 用户协议/completed → 挂机
 """
 
@@ -37,6 +38,11 @@ def load_env_file(path: str = ".env") -> None:
             key, val = key.strip(), val.strip()
             if len(val) >= 2 and val[0] == val[-1] and val[0] in ("'", '"'):
                 val = val[1:-1]
+            else:
+                # 去掉未加引号值的行尾注释（" #" 前需有空格，避免误伤 URL 里的 #）
+                hash_pos = val.find(" #")
+                if hash_pos != -1:
+                    val = val[:hash_pos].rstrip()
             os.environ.setdefault(key, val)
 
 
@@ -86,6 +92,11 @@ WINDOW_H = _env_int("WINDOW_H", 1080)
 # ==================== X11 点击 ====================
 Y_OFFSET = _env_int("Y_OFFSET", 139)  # Chrome 顶栏高度补偿，见 README
 
+# ==================== 登录模式 ====================
+# true   = 只启动浏览器，供 VNC 手动登录，不执行任何自动化
+# false  = 正常自动化流程
+LOGIN_ONLY = _env_bool("LOGIN_ONLY", False)
+
 # ==================== 模板路径 ====================
 TEMPLATE_UPDATES = _env("TEMPLATE_UPDATES", "capture/updates.png")
 TEMPLATE_START   = _env("TEMPLATE_START",   "capture/start.png")
@@ -118,6 +129,7 @@ CLICK_WAIT_MAX = _env_float("CLICK_WAIT_MAX", 2.5)
 # ==================== 浏览器 ====================
 GAME_URL = _env("GAME_URL", "https://sr.mihoyo.com/cloud/#/")
 CHROMEDRIVER_PATH = _env("CHROMEDRIVER_PATH", "/usr/local/bin/chromedriver")
+CHROME_BINARY = _env("CHROME_BINARY", "")  # 留空则用 Selenium 默认（google-chrome）
 CHROME_USER_DATA_DIR = _env("CHROME_USER_DATA_DIR", "chrome_profile")
 
 
@@ -298,6 +310,10 @@ def x11_click(x: int, y: int) -> None:
 # ======================================================================
 print(f"通知模块（AstrBot）：{'已启用' if _astrbot_ready() else '未启用'}")
 print(f"上报模块（Webhook）：{'已启用' if _webhook_ready() else '未启用'}")
+if LOGIN_ONLY:
+    print("运行模式：LOGIN_ONLY（只启动浏览器，供 VNC 手动登录）")
+else:
+    print("运行模式：正常自动化")
 
 
 # ==================== 通用工具 ====================
@@ -311,6 +327,27 @@ def save_debug_screenshot(name: str) -> str:
     driver.save_screenshot(path)
     print(f"验收截图已保存: {path}")
     return path
+
+
+def cleanup_and_exit(code: int = 0) -> None:
+    """统一退出：关闭浏览器、X 连接、Xvfb / x11vnc。"""
+    global _x_display
+    try:
+        driver.quit()
+        print("浏览器已关闭。")
+    except Exception:
+        pass
+    if _x_display is not None:
+        try:
+            _x_display.close()
+        except Exception:
+            pass
+        _x_display = None
+        print("X11 连接已关闭。")
+    subprocess.run(['pkill', 'x11vnc'], capture_output=True)
+    subprocess.run(['pkill', 'Xvfb'], capture_output=True)
+    print("已退出。")
+    raise SystemExit(code)
 
 
 # ==================== 强制清理并重启 X 环境 ====================
@@ -360,12 +397,32 @@ options.add_argument('--disable-features=VizDisplayCompositor')
 options.add_argument('--max_old_space_size=512')
 options.add_argument(f'--window-size={WINDOW_W},{WINDOW_H}')
 options.add_argument('--window-position=0,0')
+if CHROME_BINARY:
+    options.binary_location = CHROME_BINARY
 
 driver = webdriver.Chrome(service=Service(CHROMEDRIVER_PATH), options=options)
 driver.set_window_size(WINDOW_W, WINDOW_H)
 driver.set_window_position(0, 0)
 driver.get(GAME_URL)
 time.sleep(5)
+
+
+# ==================== LOGIN_ONLY 模式 ====================
+if LOGIN_ONLY:
+    print("\n" + "=" * 60)
+    print("【LOGIN_ONLY 模式】浏览器已启动，未执行任何自动化。")
+    print(f"  请用 VNC 客户端连接 你的IP:{VNC_PORT} 手动登录。")
+    print("  登录成功后：")
+    print("    1. 确认已进入游戏主界面（能看到主菜单 / 角色界面）")
+    print("    2. 回到本终端按 Ctrl+C 退出")
+    print("    3. 把 .env 里 LOGIN_ONLY 改回 false，再运行正常流程")
+    print("=" * 60 + "\n")
+    try:
+        while True:
+            time.sleep(60)
+    except KeyboardInterrupt:
+        print("\n收到 Ctrl+C，准备退出...")
+        cleanup_and_exit(0)
 
 
 # ==================== 核心函数 ====================
@@ -455,10 +512,7 @@ while time.time() - start_time < TIMEOUT_STEP1:
 if not found_start:
     img = save_debug_screenshot("timeout_step1")
     notify("【星铁自动登录】在“等待进入游戏按钮”时超时", img)
-    driver.quit()
-    if _x_display is not None:
-        _x_display.close()
-    raise SystemExit(1)
+    cleanup_and_exit(1)
 
 
 # ==================== 第2步：排队/loading ====================
@@ -500,10 +554,7 @@ if skip_to_next:
 elif not loading_found and not skip_to_next:
     img = save_debug_screenshot("timeout_step2")
     notify("【星铁自动登录】在“等待排队/加载”时超时", img)
-    driver.quit()
-    if _x_display is not None:
-        _x_display.close()
-    raise SystemExit(1)
+    cleanup_and_exit(1)
 
 
 # ==================== 第3步：用户协议 + completed ====================
@@ -551,16 +602,5 @@ else:
     notify("【星铁自动登录】在“等待进入游戏界面”时超时，已触发保险点击", final_img)
 
 
-# ==================== 关闭浏览器和 X 服务 ====================
-driver.quit()
-print("浏览器已关闭。")
-
-if _x_display is not None:
-    _x_display.close()
-    _x_display = None
-    print("X11 连接已关闭。")
-
-print("关闭 x11vnc 和 Xvfb...")
-subprocess.run(['pkill', 'x11vnc'], capture_output=True)
-subprocess.run(['pkill', 'Xvfb'], capture_output=True)
-print("完成。")
+# ==================== 收尾 ====================
+cleanup_and_exit(0)
