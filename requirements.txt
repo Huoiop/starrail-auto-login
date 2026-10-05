@@ -1,0 +1,22 @@
+# =========================================================
+# 云崩铁每日自动化 - Python 依赖
+# 运行环境：Python 3.11+（代码使用 `str | None` 语法，需 3.10+）
+# 安装：pip install -r requirements.txt
+# =========================================================
+
+# ---- 核心依赖 ----
+# 图像模板匹配；无桌面环境可改 opencv-python-headless
+opencv-python>=4.8,<5
+
+# HTTP 请求（AstrBot 通知 + Webhook 上报）
+requests>=2.31,<3
+
+# 浏览器自动化（Selenium 4 自带 Selenium Manager，可省去手配 chromedriver）
+selenium>=4.15,<5
+
+# X11 层鼠标点击（云游戏 canvas 必需）
+python-xlib>=0.33,<1
+
+# ---- 可选依赖 ----
+# 自动加载 .env。不装也能运行：脚本内置了零依赖的 .env 解析器。
+python-dotenv>=1.0,<2
