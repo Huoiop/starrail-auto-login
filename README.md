@@ -249,10 +249,16 @@ chromedriver 与 Chrome 主版本号不一致，换成同版本即可，或在 `
 `pkill -9 chrome && rm -f chrome_profile/Singleton*`。
 
 **Q：能跑多个账号吗？**
-可以，但每个账号要独立的 `CHROME_USER_DATA_DIR`。
+目前的架构仅支持单个账号。但理论上通过修改可支持多个账号。
 
 **Q：为什么不用 Selenium 直接点击？**
 canvas 里没有 DOM 元素，只能在 X11 层模拟鼠标。
+
+## 常见问题
+
+- 强烈建议在首次登录完成后手动跑一遍整个流程，点掉所有一次性的弹窗等。
+  程序已对可能出现的版本更新的免费时长赠送弹窗/隐私协议更新弹窗等做了处理，但仍不能覆盖所有可能出现的弹窗。-
+- 建议将Chrome语言切换为English以直接使用项目预设的capture图片，否则需要自行截取并完成图片替换。
 
 ---
 
@@ -263,3 +269,7 @@ canvas 里没有 DOM 元素，只能在 X11 层模拟鼠标。
 ## License
 
 [MIT](LICENSE)
+
+# 开发说明
+
+本项目由 DeepSeek 4.1 Flash 完成开发，Huoiop 已对其可用性完成验证。

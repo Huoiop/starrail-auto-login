@@ -413,7 +413,7 @@ if LOGIN_ONLY:
     print("【LOGIN_ONLY 模式】浏览器已启动，未执行任何自动化。")
     print(f"  请用 VNC 客户端连接 你的IP:{VNC_PORT} 手动登录。")
     print("  登录成功后：")
-    print("    1. 确认已进入游戏主界面（能看到主菜单 / 角色界面）")
+    print("    1. 确认已进入云游戏首页，可正常启动云游戏")
     print("    2. 回到本终端按 Ctrl+C 退出")
     print("    3. 把 .env 里 LOGIN_ONLY 改回 false，再运行正常流程")
     print("=" * 60 + "\n")
