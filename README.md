@@ -270,6 +270,6 @@ canvas 里没有 DOM 元素，只能在 X11 层模拟鼠标。
 
 [MIT](LICENSE)
 
-# 开发说明
+## 开发说明
 
 本项目由 DeepSeek 4.1 Flash 完成开发，Huoiop 已对其可用性完成验证。
